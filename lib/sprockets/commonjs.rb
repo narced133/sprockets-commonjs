@@ -3,8 +3,22 @@ require 'tilt'
 
 module Sprockets
   class CommonJS < Tilt::Template
+    LIB_WRAPPER = <<EOF
+(function(){
+  var namespace = "%s".split("."),
+      name = namespace[namespace.length - 1],
+      base = this,
+      i;
+  for(i=0; i < namespace.length-1; i++){
+    base = (base[namespace[i]] = base[namespace[i]] || {});
+  }
+  if(base[name] === undefined) {
+    base[name] = %s
+  }
+})();
+EOF
 
-    WRAPPER = '%s.define({%s:' +
+    MODULE_WRAPPER = '%s.define({%s:' +
                      'function(exports, require, module){' +
                      '%s' +
                      ";}});\n"
@@ -16,7 +30,7 @@ module Sprockets
     end
 
     self.default_mime_type = 'application/javascript'
-    self.default_namespace = 'this.require'
+    self.default_namespace = 'require'
 
     protected
 
@@ -27,7 +41,9 @@ module Sprockets
     def evaluate(scope, locals, &block)
       if commonjs_module?(scope)
         scope.require_asset 'sprockets/commonjs'
-        WRAPPER % [ namespace, module_name(scope), data ]
+        MODULE_WRAPPER % [ namespace, module_name(scope), data ]
+      elsif commonjs_lib?(scope)
+        LIB_WRAPPER % [ namespace, data ]
       else
         data
       end
@@ -39,6 +55,10 @@ module Sprockets
 
     def commonjs_module?(scope)
       EXTENSIONS.include?(File.extname(scope.logical_path))
+    end
+
+    def commonjs_lib?(scope)
+      scope.logical_path == 'sprockets/commonjs'
     end
 
     def module_name(scope)
